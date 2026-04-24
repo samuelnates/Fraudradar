@@ -63,17 +63,24 @@ const G=`
 .spin{animation:spin 1s linear infinite}
 .modal{animation:modalIn .3s ease}
 .shake{animation:shake .4s ease}
-@media(min-width:768px){
-  .desktop-two-col{display:grid!important;grid-template-columns:1fr 1fr;gap:24px;max-width:960px!important;}
-  .desktop-hero{padding:64px 32px 48px!important;}
-  .desktop-hero h1{font-size:52px!important;}
-  .desktop-wide{max-width:960px!important;padding:0 32px!important;}
-  .desktop-card{max-width:none!important;}
+/* ── Desktop layout ── */
+@media(min-width:900px){
+  .dsk-hero{padding:80px 48px 60px!important;display:flex!important;align-items:center!important;gap:60px!important;text-align:left!important;}
+  .dsk-hero-text{flex:1;text-align:left!important;}
+  .dsk-hero-logo{flex-shrink:0;}
+  .dsk-hero h1{font-size:clamp(36px,4vw,56px)!important;}
+  .dsk-hero .cta-row{justify-content:flex-start!important;}
+  .dsk-main{max-width:1100px!important;padding:0 48px!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:32px!important;align-items:start!important;}
+  .dsk-full{grid-column:1/-1!important;}
+  .dsk-single{max-width:560px!important;margin:0 auto!important;padding:0 32px!important;}
+  .dsk-result{max-width:1100px!important;padding:0 48px!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:28px!important;align-items:start!important;}
+  .dsk-result-full{grid-column:1/-1!important;}
+  .dsk-nav{padding:10px 48px!important;}
 }
 `;
 
 const dark={background:"#080c14",minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:"#e2e8f0"};
-const W={maxWidth:520,margin:"0 auto",padding:"0 16px",width:"100%"};
+const W={maxWidth:560,margin:"0 auto",padding:"0 16px",width:"100%"};
 
 // ── LOGO COMPONENTS ──────────────────────────────────────────
 function LogoHero(){
@@ -115,7 +122,7 @@ function LogoSmall(){
 
 // ── NAV ──────────────────────────────────────────────────────
 const NavBar=({lang,setLang})=>(
-  <div style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"#080c14ee",backdropFilter:"blur(10px)",borderBottom:"1px solid #1e293b",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+  <div className="dsk-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"#080c14ee",backdropFilter:"blur(10px)",borderBottom:"1px solid #1e293b",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
     <div style={{display:"flex",alignItems:"center",gap:8}}>
       <LogoSmall/>
       <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:"#f1f5f9",letterSpacing:"-.5px"}}>
@@ -574,9 +581,9 @@ export default function App(){
             </div>
           </div>
 
-          <div style={W}>
+          <div className="dsk-main" style={{...W,paddingTop:0}}>
             {/* How it works */}
-            <div style={{padding:"28px 0 20px"}}>
+            <div className="dsk-full" style={{padding:"28px 0 20px",gridColumn:"1/-1"}}>
               <p style={{color:"#475569",fontSize:10,letterSpacing:3,textTransform:"uppercase",textAlign:"center",margin:"0 0 18px",fontFamily:"monospace"}}>{lang==="es"?"Cómo funciona":"How it works"}</p>
               {[[lang==="es"?"Sube tus datos":"Upload your data",lang==="es"?"CSV, TXT o pega los montos directamente. Facturación, nómina, gastos.":"CSV, TXT or paste amounts directly. Billing, payroll, expenses.","📂","01"],
                 [lang==="es"?"Motor de análisis":"Forensic engine",lang==="es"?"Metodología estadística de nivel institucional, validada internacionalmente.":"Institutional-grade statistical methodology, internationally validated.","🔬","02"],
@@ -596,7 +603,7 @@ export default function App(){
             </div>
 
             {/* Institutions */}
-            <div style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:13,padding:"18px",marginBottom:18}}>
+            <div className="dsk-full" style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:13,padding:"18px",marginBottom:18}}>
               <p style={{color:"#475569",fontSize:10,letterSpacing:3,textTransform:"uppercase",margin:"0 0 5px",fontFamily:"monospace"}}>{lang==="es"?"Metodología utilizada por":"Methodology used by"}</p>
               <p style={{color:"#334155",fontSize:12,margin:"0 0 14px",lineHeight:1.5}}>{lang==="es"?"La misma técnica forense que usan los reguladores y auditores más exigentes del mundo.":"The same forensic technique used by the world's most demanding regulators and auditors."}</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7}}>
@@ -624,7 +631,7 @@ export default function App(){
             </div>
 
             {/* Written summary toggle */}
-            <div style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:13,overflow:"hidden",marginBottom:16}}>
+            <div className="dsk-full" style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:13,overflow:"hidden",marginBottom:16}}>
               <div style={{position:"relative",background:"linear-gradient(135deg,#060d1a,#0d1829)",aspectRatio:"16/9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
                 <div style={{width:54,height:54,background:"linear-gradient(135deg,#1d4ed8,#6366f1)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,marginBottom:12,animation:"pulse 2s ease infinite",boxShadow:"0 0 32px #3b82f640"}}>▶</div>
                 <p style={{color:"#f1f5f9",fontSize:14,fontWeight:700,margin:"0 0 4px",fontFamily:"'Syne',sans-serif"}}>{lang==="es"?"¿Cómo funciona?":"How does it work?"}</p>
@@ -649,7 +656,7 @@ export default function App(){
             </div>
 
             {/* Upload section */}
-            <div id="upload-sec">
+            <div id="upload-sec" className="dsk-full">
               <p style={{color:"#475569",fontSize:10,letterSpacing:3,textTransform:"uppercase",margin:"0 0 12px",fontFamily:"monospace"}}>{lang==="es"?"Analiza tus datos ahora":"Analyze your data now"}</p>
 
               {/* Plan card */}
@@ -885,7 +892,7 @@ export default function App(){
         <div style={{...dark,padding:"72px 0 60px"}} className="fade desktop-result">
           <div style={W}>
             {/* Verdict */}
-            <div style={{background:verdict.bg,border:`1.5px solid ${verdict.color}44`,borderRadius:15,padding:"18px",marginBottom:15,display:"flex",alignItems:"center",gap:14}}>
+            <div className="dsk-result-full" style={{background:verdict.bg,border:`1.5px solid ${verdict.color}44`,borderRadius:15,padding:"18px",marginBottom:15,display:"flex",alignItems:"center",gap:14}}>
               <div style={{width:50,height:50,background:verdict.color+"22",border:`2px solid ${verdict.color}`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{verdict.icon}</div>
               <div>
                 <p style={{color:verdict.color,fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:19,margin:"0 0 2px",letterSpacing:.5}}>{vLabel}</p>
@@ -893,7 +900,7 @@ export default function App(){
               </div>
             </div>
             {/* Disclaimer */}
-            <div style={{background:"#0d1117",border:"1px solid #f59e0b22",borderRadius:9,padding:"9px 12px",marginBottom:14,display:"flex",gap:7,alignItems:"flex-start"}}>
+            <div className="dsk-result-full" style={{background:"#0d1117",border:"1px solid #f59e0b22",borderRadius:9,padding:"9px 12px",marginBottom:14,display:"flex",gap:7,alignItems:"flex-start"}}>
               <span style={{fontSize:13,flexShrink:0}}>⚠️</span>
               <p style={{color:"#94a3b8",fontSize:11,lineHeight:1.5,margin:0}}>
                 {lang==="es"?"Este resultado es estadístico e indicativo. No constituye prueba legal.":"This result is statistical and indicative. Not legal proof."}{" "}
@@ -910,7 +917,7 @@ export default function App(){
               ))}
             </div>
             {/* Multi-test narrative */}
-            <div style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:11,padding:"14px",marginBottom:14}}>
+            <div className="dsk-result-full" style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:11,padding:"14px",marginBottom:14}}>
               <p style={{color:"#475569",fontSize:9,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px",fontFamily:"monospace"}}>{lang==="es"?"Banco de pruebas estadísticas ejecutadas":"Statistical test battery executed"}</p>
               {[
                 [lang==="es"?"Prueba de Distribución de Benford":"Benford Distribution Test","chi²="+score.toFixed(2)+", p"+pApprox,score>15.5,"🔬",lang==="es"?"DETECTÓ ANOMALÍA":"ANOMALY DETECTED",lang==="es"?"Normal":"Normal"],
@@ -967,7 +974,7 @@ export default function App(){
 
             {/* Attack zones */}
             {score>15.5&&anomalous.length>0&&(
-            <div style={{background:"#2d0a0a",border:"1px solid #ef444433",borderRadius:11,padding:"14px",marginBottom:14}}>
+            <div className="dsk-result-full" style={{background:"#2d0a0a",border:"1px solid #ef444433",borderRadius:11,padding:"14px",marginBottom:14}}>
               <p style={{color:"#ef4444",fontSize:9,letterSpacing:2,textTransform:"uppercase",margin:"0 0 10px",fontFamily:"monospace"}}>🎯 {lang==="es"?"Zonas de ataque — dónde buscar el fraude":"Attack zones — where to look for fraud"}</p>
               {anomalous.slice(0,3).map(p=>(
                 <div key={p.digit} style={{background:"#080c14",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #ef444422"}}>
@@ -1021,17 +1028,17 @@ export default function App(){
               </div>
             </div>
             {/* Interpretation */}
-            <div style={{background:"#0d1117",borderLeft:`4px solid ${verdict.color}`,borderRadius:"0 11px 11px 0",padding:"14px 16px",marginBottom:18,border:`1px solid #1e293b`,borderLeftWidth:4,borderLeftColor:verdict.color}}>
+            <div className="dsk-result-full" style={{background:"#0d1117",borderLeft:`4px solid ${verdict.color}`,borderRadius:"0 11px 11px 0",padding:"14px 16px",marginBottom:18,border:`1px solid #1e293b`,borderLeftWidth:4,borderLeftColor:verdict.color}}>
               <p style={{color:"#64748b",fontSize:10,letterSpacing:2,textTransform:"uppercase",margin:"0 0 7px",fontFamily:"monospace"}}>{lang==="es"?"Interpretación":"Interpretation"}</p>
               <p style={{color:"#94a3b8",fontSize:13,lineHeight:1.7,margin:0}}>
                 {score<15.5?(lang==="es"?"El conjunto de datos presenta patrones estadísticos consistentes con registros financieros orgánicos. No se detectaron señales de anomalía significativa. Los datos parecen corresponder a transacciones reales no alteradas.":"The analyzed dataset presents statistical patterns consistent with organic financial records. No significant anomaly signals were detected."):score<25?(lang==="es"?"Se detectaron desviaciones estadísticas moderadas. Se recomienda revisión manual de los registros con mayor concentración en rangos específicos de valores.":"Moderate statistical deviations detected. Manual review of records with higher concentration in specific value ranges is recommended."):(lang==="es"?"El conjunto de datos presenta anomalías estadísticas significativas. Se recomienda auditoría formal inmediata por contador público certificado.":"The dataset presents significant statistical anomalies. Immediate formal audit by a certified public accountant is strongly recommended.")}
               </p>
             </div>
             {/* PDF button */}
-            <button onClick={handlePDF} disabled={pdfLoading} style={{width:"100%",background:pdfDone?"#052e16":pdfLoading?"#1e293b":"#f1f5f9",color:pdfDone?"#4ade80":pdfLoading?"#475569":"#080c14",border:pdfDone?"1.5px solid #22c55e":"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:pdfLoading?"not-allowed":"pointer",fontFamily:"inherit",marginBottom:9,display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .3s"}}>
+            <button className="dsk-result-full" onClick={handlePDF} disabled={pdfLoading} style={{width:"100%",background:pdfDone?"#052e16":pdfLoading?"#1e293b":"#f1f5f9",color:pdfDone?"#4ade80":pdfLoading?"#475569":"#080c14",border:pdfDone?"1.5px solid #22c55e":"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:pdfLoading?"not-allowed":"pointer",fontFamily:"inherit",marginBottom:9,display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .3s"}}>
               {pdfLoading?<><div style={{width:15,height:15,border:"2px solid #334155",borderTopColor:"#94a3b8",borderRadius:"50%"}} className="spin"/>{lang==="es"?"Generando...":"Generating..."}</>:pdfDone?<>✓ {lang==="es"?"Reporte descargado":"Report downloaded"}</>:<>{lang==="es"?"📄 Descargar reporte PDF":"📄 Download PDF report"}</>}
             </button>
-            <button onClick={reset} style={{width:"100%",background:"transparent",color:"#475569",border:"1px solid #1e293b",borderRadius:12,padding:"12px",fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{lang==="es"?"Analizar otro archivo":"Analyze another file"}</button>
+            <button className="dsk-result-full" onClick={reset} style={{width:"100%",background:"transparent",color:"#475569",border:"1px solid #1e293b",borderRadius:12,padding:"12px",fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{lang==="es"?"Analizar otro archivo":"Analyze another file"}</button>
             <div style={{borderTop:"1px solid #1e293b",paddingTop:13,display:"flex",flexDirection:"column",alignItems:"center",gap:7}}>
               <div style={{display:"flex",gap:13,flexWrap:"wrap",justifyContent:"center"}}>
                 {["🔒 SSL 256-bit","✓ Stripe Verified","🛡 "+(lang==="es"?"Datos no almacenados":"Data not stored")].map(b=><span key={b} style={{color:"#334155",fontSize:10,fontFamily:"monospace"}}>{b}</span>)}
