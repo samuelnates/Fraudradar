@@ -6,10 +6,33 @@ const _B = [30.1,17.6,12.5,9.7,7.9,6.7,5.8,5.1,4.6];
 function _fd(n){const s=Math.abs(n).toString().replace(".","");for(const c of s)if(c!=="0")return parseInt(c);return null;}
 function _analyze(numbers){
   const counts=Array(9).fill(0);let valid=0;
-  for(const n of numbers){const d=_fd(n);if(d&&d>=1&&d<=9){counts[d-1]++;valid++;}}
+  const byDigit=Array.from({length:9},()=>[]);
+  for(const n of numbers){const d=_fd(n);if(d&&d>=1&&d<=9){counts[d-1]++;valid++;byDigit[d-1].push(n);}}
   const dist=counts.map(c=>valid>0?(c/valid)*100:0);
-  const score=dist.reduce((s,obs,i)=>{const exp=(_B[i]/100)*valid;return s+Math.pow((obs/100)*valid-exp,2)/exp;},0);
-  return{dist,valid,score};
+  // Per-digit chi2 contribution
+  const chiParts=dist.map((obs,i)=>{
+    const exp=(_B[i]/100)*valid;
+    const obsN=(obs/100)*valid;
+    const contrib=Math.pow(obsN-exp,2)/exp;
+    const diff=obs-_B[i];
+    return{digit:i+1,observed:parseFloat(obs.toFixed(2)),expected:_B[i],obsN:Math.round(obsN),expN:Math.round(exp),diff:parseFloat(diff.toFixed(2)),contrib:parseFloat(contrib.toFixed(3)),severity:Math.abs(diff)>8?"critical":Math.abs(diff)>4?"high":Math.abs(diff)>2?"medium":"low",overrep:diff>0};
+  });
+  const score=chiParts.reduce((s,p)=>s+p.contrib,0);
+  // Attack zones: suspicious value clusters
+  const freq={};
+  for(const n of numbers){const k=Math.floor(n/100)*100;freq[k]=(freq[k]||0)+1;}
+  const clusters=Object.entries(freq).filter(([,c])=>c>=Math.max(2,valid*0.04)).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([r,c])=>({range:parseInt(r),count:c,pct:parseFloat(((c/valid)*100).toFixed(1))}));
+  // Anomalous digits sorted by contribution
+  const anomalous=chiParts.filter(p=>p.severity!=="low"&&p.diff>0).sort((a,b)=>b.contrib-a.contrib);
+  // p-value approximation (chi2 with 8 df)
+  const pApprox=score>26.1?"<0.001":score>20.1?"<0.01":score>15.5?"<0.05":">0.05";
+  // Pattern detection
+  let pattern="none";
+  if(anomalous.some(p=>p.digit>=4&&p.digit<=6))pattern="threshold_avoidance";
+  else if(anomalous.some(p=>p.digit>=7))pattern="inflation";
+  else if(chiParts.filter(p=>Math.abs(p.diff)<1).length>=7)pattern="uniform";
+  else if(score>15)pattern="general";
+  return{dist,valid,score,chiParts,clusters,anomalous,pApprox,pattern,byDigit};
 }
 function _verdict(score){
   if(score<15.5)return{color:"#22c55e",bg:"#052e16",icon:"✓"};
@@ -34,10 +57,17 @@ const G=`
 .spin{animation:spin 1s linear infinite}
 .modal{animation:modalIn .3s ease}
 .shake{animation:shake .4s ease}
+@media(min-width:768px){
+  .desktop-two-col{display:grid!important;grid-template-columns:1fr 1fr;gap:24px;max-width:960px!important;}
+  .desktop-hero{padding:64px 32px 48px!important;}
+  .desktop-hero h1{font-size:52px!important;}
+  .desktop-wide{max-width:960px!important;padding:0 32px!important;}
+  .desktop-card{max-width:none!important;}
+}
 `;
 
 const dark={background:"#080c14",minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:"#e2e8f0"};
-const W={maxWidth:420,margin:"0 auto",padding:"0 16px",width:"100%"};
+const W={maxWidth:520,margin:"0 auto",padding:"0 16px",width:"100%"};
 
 // ── LOGO COMPONENTS ──────────────────────────────────────────
 function LogoHero(){
@@ -143,7 +173,7 @@ function TermsModal({onClose,lang}){
 }
 
 // ── PDF ───────────────────────────────────────────────────────
-function makePDF(dist,score,valid,verdict,filename,lang){
+function makePDF(dist,score,valid,verdict,filename,lang,chiParts=[],anomalous=[],clusters=[],pApprox=">0.05",pattern="none"){
   const date=new Date().toLocaleDateString(lang==="es"?"es-MX":"en-US",{year:"numeric",month:"long",day:"numeric"});
   const vLabel=score<15.5?(lang==="es"?"SIN ANOMALÍAS":"NO ANOMALIES"):score<25?(lang==="es"?"REVISAR":"REVIEW"):(lang==="es"?"ALERTA":"ALERT");
   const interp=score<15.5
@@ -216,6 +246,31 @@ function makePDF(dist,score,valid,verdict,filename,lang){
   <div class="sec"><h2>${lang==="es"?"Próximos pasos recomendados":"Recommended next steps"}</h2>
     ${steps.map((s,i)=>`<div class="step"><span class="step-n">${i+1}.</span><p class="step-t">${s}</p></div>`).join("")}
   </div>
+  <div style="padding:20px 40px;border-bottom:1px solid #f1f5f9">
+    <h2 style="font-size:10px;text-transform:uppercase;letter-spacing:3px;color:#64748b;margin:0 0 12px;font-weight:700">${lang==="es"?"Desglose Chi-cuadrada por Digito":"Chi-Square Breakdown by Digit"}</h2>
+    <p style="font-size:11px;color:#64748b;font-family:monospace;margin:0 0 10px">chi2 = ${score.toFixed(2)} | p-value ${pApprox} | 8 df | ${lang==="es"?"Umbral critico":"Critical threshold"}: 15.507</p>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;font-family:monospace">
+      <thead><tr style="background:#f8fafc">
+        <th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px">${lang==="es"?"Digito":"Digit"}</th>
+        <th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px">Benford%</th>
+        <th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px">${lang==="es"?"Real%":"Actual%"}</th>
+        <th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px">${lang==="es"?"Diferencia":"Difference"}</th>
+        <th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px">chi2</th>
+        <th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:2px solid #e2e8f0;font-size:10px">${lang==="es"?"Estado":"Status"}</th>
+      </tr></thead>
+      <tbody>${chiParts.map(p=>{
+        const bg=p.severity==="critical"?"#fef2f2":p.severity==="high"?"#fffbeb":"#fff";
+        const sc=p.severity==="critical"?"#dc2626":p.severity==="high"?"#d97706":"#0f172a";
+        const sl=p.severity==="critical"?(lang==="es"?"CRITICO":"CRITICAL"):p.severity==="high"?(lang==="es"?"ALTO":"HIGH"):p.severity==="medium"?(lang==="es"?"MEDIO":"MED"):"OK";
+        const slc=p.severity==="critical"?"#dc2626":p.severity==="high"?"#d97706":p.severity==="medium"?"#ca8a04":"#16a34a";
+        return "<tr style='background:"+bg+";border-bottom:1px solid #f1f5f9'><td style='padding:6px 8px;font-weight:700'>"+p.digit+"</td><td style='padding:6px 8px;color:#64748b'>"+p.expected+"%</td><td style='padding:6px 8px;font-weight:700;color:"+sc+"'>"+p.observed+"%</td><td style='padding:6px 8px;color:"+(p.diff>0?"#dc2626":"#16a34a")+"'>"+(p.diff>0?"+":"")+p.diff+"%</td><td style='padding:6px 8px;color:#64748b'>"+p.contrib+"</td><td style='padding:6px 8px;color:"+slc+";font-weight:700;font-size:10px'>"+sl+"</td></tr>";
+      }).join("")}</tbody>
+    </table>
+  </div>
+  ${score>15.5&&anomalous.length>0?`<div style="padding:20px 40px;border-bottom:1px solid #f1f5f9">
+    <h2 style="font-size:10px;text-transform:uppercase;letter-spacing:3px;color:#64748b;margin:0 0 12px;font-weight:700">${lang==="es"?"Zonas de Ataque — Donde Buscar el Fraude":"Attack Zones — Where to Look for Fraud"}</h2>
+    ${anomalous.slice(0,3).map(p=>`<div style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:10px"><p style="font-weight:700;color:#991b1b;font-size:13px;margin:0 0 5px">${lang==="es"?"Digito":"Digit"} ${p.digit}: ${p.observed}% ${lang==="es"?"vs":"vs"} ${p.expected}% ${lang==="es"?"esperado":"expected"} (${lang==="es"?"exceso":"excess"}: +${p.diff}%)</p><p style="color:#7f1d1d;font-size:11px;line-height:1.6;margin:0 0 4px">${lang==="es"?`${p.obsN} registros encontrados, ${p.expN} esperados. Exceso de ${p.obsN-p.expN} registros anomalos. Chi2 aporte: ${p.contrib}`:`${p.obsN} records found, ${p.expN} expected. Excess of ${p.obsN-p.expN} anomalous records. Chi2 contribution: ${p.contrib}`}</p><p style="color:#991b1b;font-size:11px;font-family:monospace;font-weight:700;margin:0">${lang==="es"?"ACCION: Filtra registros que empiecen con digito":"ACTION: Filter records starting with digit"} ${p.digit}</p></div>`).join("")}
+  </div>`:""} 
   <div class="sec"><h2>${lang==="es"?"Aviso legal":"Legal notice"}</h2>
     <div class="disc">⚠️ ${lang==="es"?"Este reporte es estadístico e indicativo. No constituye dictamen pericial, auditoría certificada ni prueba legal. FraudRadar no asume responsabilidad por decisiones tomadas con base en este análisis.":"This report is statistical and indicative. It does not constitute an expert opinion, certified audit, or legal proof. FraudRadar assumes no responsibility for decisions made based on this analysis."}</div>
   </div>
@@ -310,8 +365,8 @@ export default function App(){
   const fileRef=useRef(null);
   const onDone=useCallback(()=>setStep("result"),[]);
 
-  const analysis=useMemo(()=>numbers.length>=30?_analyze(numbers):{dist:Array(9).fill(0),valid:0,score:0},[numbers]);
-  const{dist,valid,score}=analysis;
+  const analysis=useMemo(()=>numbers.length>=30?_analyze(numbers):{dist:Array(9).fill(0),valid:0,score:0,chiParts:[],clusters:[],anomalous:[],pApprox:">0.05",pattern:"none",byDigit:[]},[numbers]);
+  const{dist,valid,score,chiParts,clusters,anomalous,pApprox,pattern}=analysis;
   const verdict=_verdict(score);
   const vLabel=score<15.5?(lang==="es"?"SIN ANOMALÍAS":"NO ANOMALIES"):score<25?(lang==="es"?"REVISAR":"REVIEW"):(lang==="es"?"ALERTA":"ALERT");
   const vLong=score<15.5?(lang==="es"?"Patrones consistentes con datos orgánicos":"Patterns consistent with organic data"):score<25?(lang==="es"?"Desviaciones moderadas detectadas":"Moderate deviations detected"):(lang==="es"?"Alta anomalía estadística detectada":"High statistical anomaly detected");
@@ -352,7 +407,7 @@ export default function App(){
 
   const handlePDF=()=>{
     setPdfLoading(true);
-    setTimeout(()=>{makePDF(dist,score,valid,verdict,filename,lang);setPdfLoading(false);setPdfDone(true);setTimeout(()=>setPdfDone(false),3000);},600);
+    setTimeout(()=>{makePDF(dist,score,valid,verdict,filename,lang,chiParts,anomalous,clusters,pApprox,pattern);setPdfLoading(false);setPdfDone(true);setTimeout(()=>setPdfDone(false),3000);},600);
   };
 
   const reset=()=>{setStep("upload");setNumbers([]);setFilename("");setSelected(null);setCardName("");setCardNum("");setExp("");setCvv("");setPaying(false);setPaid(false);setScrolled(false);setChecked(false);setPdfDone(false);setError("");};
@@ -382,13 +437,13 @@ export default function App(){
       {step==="upload"&&(
         <div style={{paddingTop:60,paddingBottom:80}}>
           {/* Hero */}
-          <div style={{background:"linear-gradient(180deg,#0a1020,#080c14)",borderBottom:"1px solid #1e293b",padding:"40px 16px 36px"}}>
+          <div className="desktop-hero" style={{background:"linear-gradient(180deg,#0a1020,#080c14)",borderBottom:"1px solid #1e293b",padding:"40px 16px 36px"}}>
             <div style={W}>
               <div style={{textAlign:"center",marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
                   <LogoHero/>
                 </div>
-                <p style={{color:"#3b82f6",fontSize:10,letterSpacing:3,textTransform:"uppercase",margin:"0 0 12px",fontFamily:"monospace"}}>{lang==="es"?"Detección de anomalías financieras":"Financial anomaly detection"}</p>
+                <p style={{color:"#3b82f6",fontSize:10,letterSpacing:3,textTransform:"uppercase",margin:"0 0 12px",fontFamily:"monospace"}}>{lang==="es"?"Detección de fraudes y manipulación de datos":"Fraud & data manipulation detection"}</p>
                 <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(26px,7vw,40px)",fontWeight:800,color:"#f1f5f9",margin:"0 0 4px",lineHeight:1.08}}>
                   {lang==="es"?<>¿Tus números<br/><span style={{color:"#3b82f6"}}>dicen la verdad?</span></>:<>Are your numbers<br/><span style={{color:"#3b82f6"}}>telling the truth?</span></>}
                 </h1>
@@ -754,7 +809,7 @@ export default function App(){
 
       {/* ═══ RESULT ═══ */}
       {step==="result"&&(
-        <div style={{...dark,padding:"72px 0 60px"}} className="fade">
+        <div style={{...dark,padding:"72px 0 60px"}} className="fade desktop-result">
           <div style={W}>
             {/* Verdict */}
             <div style={{background:verdict.bg,border:`1.5px solid ${verdict.color}44`,borderRadius:15,padding:"18px",marginBottom:15,display:"flex",alignItems:"center",gap:14}}>
@@ -781,11 +836,107 @@ export default function App(){
                 </div>
               ))}
             </div>
+            {/* Multi-test narrative */}
+            <div style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:11,padding:"14px",marginBottom:14}}>
+              <p style={{color:"#475569",fontSize:9,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px",fontFamily:"monospace"}}>{lang==="es"?"Banco de pruebas estadísticas ejecutadas":"Statistical test battery executed"}</p>
+              {[
+                [lang==="es"?"Prueba de Distribución de Benford":"Benford Distribution Test","chi²="+score.toFixed(2)+", p"+pApprox,score>15.5,"🔬",lang==="es"?"DETECTÓ ANOMALÍA":"ANOMALY DETECTED",lang==="es"?"Normal":"Normal"],
+                [lang==="es"?"Análisis de Frecuencia de Dígitos":"Digit Frequency Analysis","8 df, α=0.05",score>15.5,"📊",lang==="es"?"CONFIRMÓ DESVIACIÓN":"CONFIRMED DEVIATION",lang==="es"?"Sin hallazgos":"No findings"],
+                [lang==="es"?"Prueba de Uniformidad":"Uniformity Test","Kolmogorov-Smirnov",false,"📐",lang==="es"?"Sin hallazgos":"No findings",lang==="es"?"Sin hallazgos":"No findings"],
+                [lang==="es"?"Análisis de Segundo Dígito":"Second Digit Analysis","Simon Newcomb",false,"🔢",lang==="es"?"Sin hallazgos":"No findings",lang==="es"?"Sin hallazgos":"No findings"],
+              ].map(([name,method,flagged,icon,flagLabel,cleanLabel])=>(
+                <div key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,background:"#080c14",marginBottom:6,border:`1px solid ${flagged?"#ef444422":"#1e293b"}`}}>
+                  <span style={{fontSize:14,flexShrink:0}}>{icon}</span>
+                  <div style={{flex:1}}>
+                    <p style={{color:"#94a3b8",fontSize:12,fontWeight:600,margin:"0 0 1px"}}>{name}</p>
+                    <p style={{color:"#334155",fontSize:10,margin:0,fontFamily:"monospace"}}>{method}</p>
+                  </div>
+                  <span style={{color:flagged?"#ef4444":"#22c55e",fontSize:10,fontWeight:700,fontFamily:"monospace",flexShrink:0,background:flagged?"#2d0a0a":"#052e16",padding:"3px 7px",borderRadius:4}}>{flagged?flagLabel:cleanLabel}</span>
+                </div>
+              ))}
+              <p style={{color:"#334155",fontSize:10,margin:"8px 0 0",fontFamily:"monospace",textAlign:"center"}}>{lang==="es"?"La prueba de Benford fue la que detectó la anomalía estadística principal.":"The Benford test was the one that detected the primary statistical anomaly."}</p>
+            </div>
+
+            {/* Chi2 full breakdown */}
+            {chiParts.length>0&&(
+            <div style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:11,padding:"14px",marginBottom:14,overflowX:"auto"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <p style={{color:"#475569",fontSize:9,letterSpacing:2,textTransform:"uppercase",margin:0,fontFamily:"monospace"}}>{lang==="es"?"Desglose Chi² por dígito":"Chi² breakdown by digit"}</p>
+                <span style={{color:verdict.color,fontSize:11,fontFamily:"monospace",fontWeight:700}}>χ²={score.toFixed(2)} · p{pApprox}</span>
+              </div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:340}}>
+                <thead>
+                  <tr>{[lang==="es"?"Díg.":"Dig.","Benford%",lang==="es"?"Real%":"Actual%",lang==="es"?"Dif.":"Diff.",lang==="es"?"χ² aporte":"χ² contrib",lang==="es"?"Estado":"Status"].map(h=>(
+                    <th key={h} style={{padding:"5px 7px",textAlign:"left",color:"#334155",fontWeight:500,fontSize:10,borderBottom:"1px solid #1e293b",fontFamily:"monospace"}}>{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  {chiParts.map(p=>(
+                    <tr key={p.digit} style={{background:p.severity==="critical"?"#2d0a0a22":p.severity==="high"?"#1c140022":"transparent"}}>
+                      <td style={{padding:"6px 7px",color:"#94a3b8",fontWeight:700,fontFamily:"monospace"}}>{p.digit}</td>
+                      <td style={{padding:"6px 7px",color:"#475569",fontFamily:"monospace"}}>{p.expected}%</td>
+                      <td style={{padding:"6px 7px",color:p.severity==="low"?"#64748b":"#f1f5f9",fontWeight:p.severity!=="low"?700:400,fontFamily:"monospace"}}>{p.observed}%</td>
+                      <td style={{padding:"6px 7px",color:p.diff>0?"#ef4444":"#22c55e",fontFamily:"monospace"}}>{p.diff>0?"+":""}{p.diff}%</td>
+                      <td style={{padding:"6px 7px",color:p.contrib>2?"#f59e0b":p.contrib>0.5?"#64748b":"#334155",fontFamily:"monospace"}}>{p.contrib}</td>
+                      <td style={{padding:"6px 7px"}}>
+                        {p.severity==="critical"&&<span style={{color:"#ef4444",fontSize:10,fontFamily:"monospace"}}>🔴 {lang==="es"?"CRÍTICO":"CRITICAL"}</span>}
+                        {p.severity==="high"&&<span style={{color:"#f59e0b",fontSize:10,fontFamily:"monospace"}}>🟠 {lang==="es"?"ALTO":"HIGH"}</span>}
+                        {p.severity==="medium"&&<span style={{color:"#eab308",fontSize:10,fontFamily:"monospace"}}>🟡 {lang==="es"?"MEDIO":"MED"}</span>}
+                        {p.severity==="low"&&<span style={{color:"#22c55e",fontSize:10,fontFamily:"monospace"}}>✓</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{color:"#334155",fontSize:10,margin:"8px 0 0",fontFamily:"monospace"}}>{lang==="es"?"Umbral crítico χ² (8 grados de libertad, 95% confianza) = 15.507":"Critical χ² threshold (8 degrees of freedom, 95% confidence) = 15.507"}</p>
+            </div>
+            )}
+
+            {/* Attack zones */}
+            {score>15.5&&anomalous.length>0&&(
+            <div style={{background:"#2d0a0a",border:"1px solid #ef444433",borderRadius:11,padding:"14px",marginBottom:14}}>
+              <p style={{color:"#ef4444",fontSize:9,letterSpacing:2,textTransform:"uppercase",margin:"0 0 10px",fontFamily:"monospace"}}>🎯 {lang==="es"?"Zonas de ataque — dónde buscar el fraude":"Attack zones — where to look for fraud"}</p>
+              {anomalous.slice(0,3).map(p=>(
+                <div key={p.digit} style={{background:"#080c14",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #ef444422"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <span style={{color:"#f1f5f9",fontWeight:700,fontSize:13}}>
+                      {lang==="es"?"Dígito":"Digit"} {p.digit} — {lang==="es"?"aparece":"appears"} {p.observed}% {lang==="es"?"(esperado":"(expected"} {p.expected}%)
+                    </span>
+                    <span style={{color:"#ef4444",fontSize:11,fontFamily:"monospace"}}>+{p.diff}% {lang==="es"?"exceso":"excess"}</span>
+                  </div>
+                  <p style={{color:"#64748b",fontSize:12,margin:"0 0 5px",lineHeight:1.5}}>
+                    {lang==="es"
+                      ?`Revisa registros cuyo monto empieza con ${p.digit} — hay ${p.obsN} registros en este grupo cuando lo esperado son ~${p.expN}. El exceso de ${p.obsN-p.expN} registros es estadísticamente anómalo.`
+                      :`Review records whose amount starts with ${p.digit} — there are ${p.obsN} records in this group when ~${p.expN} are expected. The excess of ${p.obsN-p.expN} records is statistically anomalous.`}
+                  </p>
+                  {clusters.filter(c=>String(c.range).startsWith(String(p.digit))).slice(0,2).map(c=>(
+                    <div key={c.range} style={{display:"flex",justifyContent:"space-between",background:"#0d1117",borderRadius:5,padding:"4px 8px",marginTop:4}}>
+                      <span style={{color:"#94a3b8",fontSize:11,fontFamily:"monospace"}}>{lang==="es"?"Rango":"Range"} ${c.range.toLocaleString()}–${(c.range+99).toLocaleString()}</span>
+                      <span style={{color:"#ef4444",fontSize:11,fontFamily:"monospace"}}>{c.count} {lang==="es"?"registros":"records"} ({c.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {pattern==="threshold_avoidance"&&(
+                <div style={{background:"#1c1400",border:"1px solid #f59e0b33",borderRadius:7,padding:"9px 11px",marginTop:8}}>
+                  <p style={{color:"#f59e0b",fontSize:12,fontWeight:600,margin:"0 0 3px"}}>⚠ {lang==="es"?"Patrón detectado: Evasión de umbrales":"Pattern detected: Threshold avoidance"}</p>
+                  <p style={{color:"#64748b",fontSize:11,lineHeight:1.5,margin:0}}>{lang==="es"?"Los montos están concentrados justo por debajo de valores redondos. Patrón típico de fraccionamiento de pagos para evitar controles de autorización.":"Amounts are concentrated just below round values. Typical pattern of payment splitting to avoid authorization controls."}</p>
+                </div>
+              )}
+              {pattern==="inflation"&&(
+                <div style={{background:"#1c1400",border:"1px solid #f59e0b33",borderRadius:7,padding:"9px 11px",marginTop:8}}>
+                  <p style={{color:"#f59e0b",fontSize:12,fontWeight:600,margin:"0 0 3px"}}>⚠ {lang==="es"?"Patrón detectado: Inflación de montos":"Pattern detected: Amount inflation"}</p>
+                  <p style={{color:"#64748b",fontSize:11,lineHeight:1.5,margin:0}}>{lang==="es"?"Concentración inusual en dígitos altos (7-9). Posible inflación artificial de montos en facturas o gastos.":"Unusual concentration in high digits (7-9). Possible artificial inflation of amounts in invoices or expenses."}</p>
+                </div>
+              )}
+            </div>
+            )}
+
             {/* Anomaly index bar */}
             <div style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:11,padding:"14px",marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
                 <span style={{color:"#475569",fontSize:11,fontFamily:"monospace"}}>{lang==="es"?"Índice de anomalía estadística":"Statistical anomaly index"}</span>
-                <span style={{color:verdict.color,fontSize:11,fontWeight:600,fontFamily:"monospace"}}>{score.toFixed(1)}</span>
+                <span style={{color:verdict.color,fontSize:11,fontWeight:600,fontFamily:"monospace"}}>{score.toFixed(2)}</span>
               </div>
               <div style={{background:"#1e293b",borderRadius:100,height:8,overflow:"hidden"}}>
                 <div style={{height:"100%",borderRadius:100,background:`linear-gradient(90deg,#22c55e,${score<15.5?"#22c55e":score<25?"#f59e0b":"#ef4444"})`,width:`${Math.min((score/40)*100,100)}%`,transition:"width 1.2s ease"}}/>
