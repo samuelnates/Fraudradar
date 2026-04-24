@@ -1,4 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
+const _stripePromise = typeof window !== "undefined" 
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) 
+  : null;
 
 const PRICE = "$5.00 USD";
 const _B = [30.1,17.6,12.5,9.7,7.9,6.7,5.8,5.1,4.6];
@@ -338,6 +344,112 @@ function ThinkingScreen({onDone,lang}){
   );
 }
 
+
+// ── STRIPE PAYMENT FORM ───────────────────────────────────────
+function StripePaymentForm({lang,onSuccess,onBack,onShowTerms}){
+  const stripe=useStripe();
+  const elements=useElements();
+  const[name,setName]=useState("");
+  const[loading,setLoading]=useState(false);
+  const[error,setError]=useState("");
+
+  const handlePay=async()=>{
+    if(!stripe||!elements){setError(lang==="es"?"Stripe no está listo. Recarga la página.":"Stripe not ready. Please reload.");return;}
+    if(!name.trim()){setError(lang==="es"?"Ingresa tu nombre.":"Please enter your name.");return;}
+    setLoading(true);setError("");
+    try{
+      // 1. Create PaymentIntent on backend
+      const res=await fetch("/api/create-payment",{method:"POST",headers:{"Content-Type":"application/json"}});
+      if(!res.ok)throw new Error(lang==="es"?"Error del servidor. Intenta de nuevo.":"Server error. Please try again.");
+      const{clientSecret,error:beErr}=await res.json();
+      if(beErr)throw new Error(beErr);
+      // 2. Confirm card payment with Stripe
+      const{error:stripeErr,paymentIntent}=await stripe.confirmCardPayment(clientSecret,{
+        payment_method:{
+          card:elements.getElement(CardElement),
+          billing_details:{name},
+        },
+      });
+      if(stripeErr)throw new Error(stripeErr.message);
+      if(paymentIntent.status==="succeeded")onSuccess();
+    }catch(e){
+      setError(e.message||lang==="es"?"Error al procesar el pago.":"Payment processing error.");
+    }finally{
+      setLoading(false);
+    }
+  };
+
+  return(
+    <>
+      <button onClick={onBack} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 0 15px",display:"flex",alignItems:"center",gap:6}}>{lang==="es"?"← Volver":"← Back"}</button>
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {["🔒 SSL 256-bit","✓ Stripe Verified","🛡 "+(lang==="es"?"Datos no almacenados":"Data not stored")].map(b=>(
+          <span key={b} style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:5,padding:"4px 9px",color:"#475569",fontSize:10,fontFamily:"monospace"}}>{b}</span>
+        ))}
+      </div>
+      <h2 style={{fontFamily:"'Syne',sans-serif",color:"#f1f5f9",fontSize:20,fontWeight:800,margin:"0 0 4px"}}>{lang==="es"?"Datos de pago":"Payment details"}</h2>
+      <p style={{color:"#475569",fontSize:13,margin:"0 0 18px"}}>{lang==="es"?"Procesado de forma segura por Stripe":"Securely processed by Stripe"}</p>
+
+      {/* Card visual deco */}
+      <div style={{background:"linear-gradient(135deg,#1e3a5f,#0f172a)",borderRadius:13,padding:"18px",marginBottom:18,border:"1px solid #1e293b"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:13}}>
+          <span style={{fontSize:11,color:"#94a3b8",letterSpacing:2,fontFamily:"monospace"}}>FRAUDRADAR</span>
+          <div style={{display:"flex",gap:4}}>{["VISA","MC","AMEX"].map(c=><span key={c} style={{fontSize:9,background:"#1e293b",borderRadius:3,padding:"2px 5px",color:"#64748b"}}>{c}</span>)}</div>
+        </div>
+        <p style={{color:"#334155",fontSize:15,fontFamily:"monospace",margin:"0 0 11px",letterSpacing:3}}>•••• •••• •••• ••••</p>
+        <div style={{display:"flex",justifyContent:"space-between"}}>
+          <span style={{color:name?"#94a3b8":"#334155",fontSize:11,fontFamily:"monospace"}}>{name.toUpperCase()||"TITULAR"}</span>
+          <span style={{color:"#334155",fontSize:11,fontFamily:"monospace"}}>MM/AA</span>
+        </div>
+      </div>
+
+      {/* Name field */}
+      <div style={{marginBottom:12}}>
+        <label style={{color:"#64748b",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",display:"block",marginBottom:5,fontFamily:"monospace"}}>{lang==="es"?"Nombre en la tarjeta":"Name on card"}</label>
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder={lang==="es"?"Juan Pérez":"John Smith"} style={{background:"#0f172a",border:"1.5px solid #1e293b",borderRadius:8,color:"#f1f5f9",fontFamily:"inherit",fontSize:14,padding:"11px 13px",width:"100%",outline:"none",boxSizing:"border-box"}}/>
+      </div>
+
+      {/* Stripe CardElement */}
+      <div style={{marginBottom:16}}>
+        <label style={{color:"#64748b",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",display:"block",marginBottom:5,fontFamily:"monospace"}}>{lang==="es"?"Tarjeta de crédito o débito":"Credit or debit card"}</label>
+        <div style={{background:"#0f172a",border:"1.5px solid #1e293b",borderRadius:8,padding:"13px 14px"}}>
+          <CardElement options={{
+            style:{
+              base:{color:"#f1f5f9",fontFamily:"'DM Sans',sans-serif",fontSize:"15px",fontSmoothing:"antialiased","::placeholder":{color:"#334155"}},
+              invalid:{color:"#ef4444"},
+            },
+            hidePostalCode:true,
+          }}/>
+        </div>
+      </div>
+
+      {error&&<p style={{color:"#ef4444",fontSize:13,margin:"0 0 12px",lineHeight:1.4}}>{error}</p>}
+
+      <div style={{padding:"11px 13px",background:"#0d1117",border:"1px solid #1e293b",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div><p style={{color:"#94a3b8",fontSize:13,margin:"0 0 2px"}}>{lang==="es"?"Análisis Forense Completo":"Complete Forensic Analysis"}</p><p style={{color:"#475569",fontSize:11,margin:0}}>{lang==="es"?"Incluye reporte PDF":"Includes PDF report"}</p></div>
+        <span style={{color:"#f1f5f9",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18}}>$5.00 USD</span>
+      </div>
+
+      <div style={{background:"#0d1117",border:"1px solid #22c55e22",borderRadius:8,padding:"8px 11px",marginBottom:13,display:"flex",gap:6,alignItems:"center"}}>
+        <span>🛡</span><p style={{color:"#4ade80",fontSize:12,margin:0}}>{lang==="es"?"Si el análisis falla técnicamente, te devolvemos el cobro.":"If the analysis fails technically, we'll refund your payment."}</p>
+      </div>
+
+      <button onClick={handlePay} disabled={loading||!stripe} style={{width:"100%",background:loading?"#1e293b":"#2563eb",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:loading||!stripe?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:9,transition:"background .2s"}}>
+        {loading?<><div style={{width:15,height:15,border:"2px solid #334155",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>{lang==="es"?"Procesando...":"Processing..."}</>:`🔒 ${lang==="es"?"Pagar $5.00 USD":"Pay $5.00 USD"}`}
+      </button>
+
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:9,marginBottom:11}}>
+        <span style={{fontSize:12}}>⚡</span>
+        <span style={{color:"#334155",fontSize:11}}>{lang==="es"?"Encriptado SSL 256-bit · Procesado por Stripe":"256-bit SSL · Powered by Stripe"}</span>
+      </div>
+      <p style={{color:"#334155",fontSize:11,textAlign:"center",margin:0}}>
+        {lang==="es"?"Al pagar aceptas nuestros":"By paying you accept our"}{" "}
+        <button onClick={onShowTerms} style={{background:"none",border:"none",color:"#3b82f6",fontSize:11,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit",padding:0}}>{lang==="es"?"Términos":"Terms"}</button>
+      </p>
+    </>
+  );
+}
+
 // ── MAIN APP ──────────────────────────────────────────────────
 export default function App(){
   const[lang,setLang]=useState("es");
@@ -350,7 +462,7 @@ export default function App(){
   const[faqOpen,setFaqOpen]=useState(null);
   const[showTerms,setShowTerms]=useState(false);
   const[cardName,setCardName]=useState("");
-  const[cardNum,setCardNum]=useState("");
+  
   const[exp,setExp]=useState("");
   const[cvv,setCvv]=useState("");
   const[paying,setPaying]=useState(false);
@@ -389,11 +501,11 @@ export default function App(){
     r.readAsText(f);
   };
 
-  const doPayment=()=>{
-    if(!cardName||!cardNum||!exp||!cvv)return;
-    setPaying(true);
-    setTimeout(()=>{setPaid(true);setTimeout(()=>setStep("thinking"),900);},1800);
-  };
+  // Stripe payment handled by StripePaymentForm component
+  const onPaymentSuccess=useCallback(()=>{
+    setPaid(true);
+    setTimeout(()=>setStep("thinking"),900);
+  },[]);
 
   const handleScroll=()=>{
     const el=scrollRef.current;
@@ -410,7 +522,7 @@ export default function App(){
     setTimeout(()=>{makePDF(dist,score,valid,verdict,filename,lang,chiParts,anomalous,clusters,pApprox,pattern);setPdfLoading(false);setPdfDone(true);setTimeout(()=>setPdfDone(false),3000);},600);
   };
 
-  const reset=()=>{setStep("upload");setNumbers([]);setFilename("");setSelected(null);setCardName("");setCardNum("");setExp("");setCvv("");setPaying(false);setPaid(false);setScrolled(false);setChecked(false);setPdfDone(false);setError("");};
+  const reset=()=>{setStep("upload");setNumbers([]);setFilename("");setSelected(null);setPaying(false);setPaid(false);setScrolled(false);setChecked(false);setPdfDone(false);setError("");};
 
   const STEPS=[["upload","Landing"],["preview","Preview"],["terms","Términos"],["paying","Pago"],["thinking","Análisis"],["result","Resultado"]];
 
@@ -748,55 +860,16 @@ export default function App(){
       {step==="paying"&&(
         <div style={{...dark,padding:"72px 0 48px"}} className="fade">
           <div style={W}>
-            {!paid?<>
-              <button onClick={()=>setStep("terms")} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 0 15px",display:"flex",alignItems:"center",gap:6}}>{lang==="es"?"← Volver":"← Back"}</button>
-              <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-                {["🔒 SSL 256-bit","✓ Stripe Verified","🛡 "+(lang==="es"?"Datos no almacenados":"Data not stored")].map(b=><span key={b} style={{background:"#0d1117",border:"1px solid #1e293b",borderRadius:5,padding:"4px 9px",color:"#475569",fontSize:10,fontFamily:"monospace"}}>{b}</span>)}
-              </div>
-              <h2 style={{fontFamily:"'Syne',sans-serif",color:"#f1f5f9",fontSize:20,fontWeight:800,margin:"0 0 4px"}}>{lang==="es"?"Datos de pago":"Payment details"}</h2>
-              <p style={{color:"#475569",fontSize:13,margin:"0 0 18px"}}>{lang==="es"?"Procesado de forma segura por Stripe":"Securely processed by Stripe"}</p>
-              {/* Card visual */}
-              <div style={{background:"linear-gradient(135deg,#1e3a5f,#0f172a)",borderRadius:13,padding:"18px",marginBottom:18,border:"1px solid #1e293b"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:13}}>
-                  <span style={{fontSize:11,color:"#94a3b8",letterSpacing:2,fontFamily:"monospace"}}>FRAUDRADAR</span>
-                  <div style={{display:"flex",gap:4}}>{["VISA","MC","AMEX"].map(c=><span key={c} style={{fontSize:9,background:"#1e293b",borderRadius:3,padding:"2px 5px",color:"#64748b"}}>{c}</span>)}</div>
-                </div>
-                <p style={{color:cardNum?"#f1f5f9":"#334155",fontSize:15,fontFamily:"monospace",margin:"0 0 11px",letterSpacing:3}}>{cardNum?cardNum.replace(/(.{4})/g,"$1 ").trim():"•••• •••• •••• ••••"}</p>
-                <div style={{display:"flex",justifyContent:"space-between"}}>
-                  <span style={{color:cardName?"#94a3b8":"#334155",fontSize:11,fontFamily:"monospace"}}>{cardName.toUpperCase()||"TITULAR"}</span>
-                  <span style={{color:exp?"#94a3b8":"#334155",fontSize:11,fontFamily:"monospace"}}>{exp||"MM/AA"}</span>
-                </div>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:11}}>
-                <div><label style={{color:"#64748b",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",display:"block",marginBottom:5,fontFamily:"monospace"}}>{lang==="es"?"Nombre en la tarjeta":"Name on card"}</label>
-                  <input value={cardName} onChange={e=>setCardName(e.target.value)} placeholder={lang==="es"?"Juan Pérez":"John Smith"} style={{background:"#0f172a",border:"1.5px solid #1e293b",borderRadius:8,color:"#f1f5f9",fontFamily:"inherit",fontSize:14,padding:"11px 13px",width:"100%",outline:"none"}}/></div>
-                <div><label style={{color:"#64748b",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",display:"block",marginBottom:5,fontFamily:"monospace"}}>{lang==="es"?"Número de tarjeta":"Card number"}</label>
-                  <input value={cardNum} onChange={e=>setCardNum(e.target.value.replace(/\D/g,"").slice(0,16))} placeholder="4242 4242 4242 4242" style={{background:"#0f172a",border:"1.5px solid #1e293b",borderRadius:8,color:"#f1f5f9",fontFamily:"monospace",fontSize:14,padding:"11px 13px",width:"100%",outline:"none"}}/></div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                  <div><label style={{color:"#64748b",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",display:"block",marginBottom:5,fontFamily:"monospace"}}>{lang==="es"?"Vencimiento":"Expiry"}</label>
-                    <input value={exp} onChange={e=>{let v=e.target.value.replace(/\D/g,"");if(v.length>=2)v=v.slice(0,2)+"/"+v.slice(2,4);setExp(v);}} placeholder="MM/AA" maxLength={5} style={{background:"#0f172a",border:"1.5px solid #1e293b",borderRadius:8,color:"#f1f5f9",fontFamily:"monospace",fontSize:14,padding:"11px 13px",width:"100%",outline:"none"}}/></div>
-                  <div><label style={{color:"#64748b",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",display:"block",marginBottom:5,fontFamily:"monospace"}}>CVV</label>
-                    <input value={cvv} onChange={e=>setCvv(e.target.value.replace(/\D/g,"").slice(0,4))} placeholder="•••" maxLength={4} style={{background:"#0f172a",border:"1.5px solid #1e293b",borderRadius:8,color:"#f1f5f9",fontFamily:"monospace",fontSize:14,padding:"11px 13px",width:"100%",outline:"none"}}/></div>
-                </div>
-              </div>
-              <div style={{margin:"15px 0",padding:"11px 13px",background:"#0d1117",border:"1px solid #1e293b",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><p style={{color:"#94a3b8",fontSize:13,margin:"0 0 2px"}}>{lang==="es"?"Análisis Forense Completo":"Complete Forensic Analysis"}</p><p style={{color:"#475569",fontSize:11,margin:0}}>{lang==="es"?"Incluye reporte PDF":"Includes PDF report"}</p></div>
-                <span style={{color:"#f1f5f9",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18}}>{PRICE}</span>
-              </div>
-              <div style={{background:"#0d1117",border:"1px solid #22c55e22",borderRadius:8,padding:"8px 11px",marginBottom:13,display:"flex",gap:6,alignItems:"center"}}>
-                <span>🛡</span><p style={{color:"#4ade80",fontSize:12,margin:0}}>{lang==="es"?"Si el análisis falla técnicamente, te devolvemos el cobro.":"If the analysis fails technically, we'll refund your payment."}</p>
-              </div>
-              <button onClick={doPayment} disabled={paying} style={{width:"100%",background:paying?"#1e293b":"#2563eb",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:paying?"not-allowed":"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:9}}>
-                {paying?<><div style={{width:15,height:15,border:"2px solid #334155",borderTopColor:"#fff",borderRadius:"50%"}} className="spin"/>{lang==="es"?"Procesando...":"Processing..."}</>:`🔒 ${lang==="es"?"Pagar":"Pay"} ${PRICE}`}
-              </button>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:9,marginBottom:11}}>
-                <span style={{fontSize:12}}>⚡</span><span style={{color:"#334155",fontSize:11}}>{lang==="es"?"Encriptado SSL 256-bit · Procesado por Stripe":"256-bit SSL · Powered by Stripe"}</span>
-              </div>
-              <p style={{color:"#334155",fontSize:11,textAlign:"center",margin:0}}>
-                {lang==="es"?"Al pagar aceptas nuestros":"By paying you accept our"}{" "}
-                <button onClick={()=>setShowTerms(true)} style={{background:"none",border:"none",color:"#3b82f6",fontSize:11,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit",padding:0}}>{lang==="es"?"Términos":"Terms"}</button>
-              </p>
-            </>:(
+            {!paid?(
+              <Elements stripe={_stripePromise}>
+                <StripePaymentForm
+                  lang={lang}
+                  onSuccess={onPaymentSuccess}
+                  onBack={()=>setStep("terms")}
+                  onShowTerms={()=>setShowTerms(true)}
+                />
+              </Elements>
+            ):(
               <div style={{textAlign:"center",padding:"80px 0"}} className="fade">
                 <div style={{width:60,height:60,background:"#052e16",border:"2px solid #22c55e",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:26}}>✓</div>
                 <p style={{color:"#4ade80",fontSize:20,fontWeight:700,margin:"0 0 5px",fontFamily:"'Syne',sans-serif"}}>{lang==="es"?"¡Pago exitoso!":"Payment successful!"}</p>
