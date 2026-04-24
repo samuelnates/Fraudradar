@@ -1,18 +1,4 @@
-{
-  "name": "fraudradar",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
-  "dependencies": {
-    "next": "14.2.3",
-    "react": "^18",
-    "react-dom": "^18",
-    "stripe": "^14.21.0",
-    "@stripe/stripe-js": "^3.4.1",
-    "@stripe/react-stripe-js": "^2.7.1"
-  }
-}
+node_modules/
+.next/
+.env.local
+.env

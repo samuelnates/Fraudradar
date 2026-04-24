@@ -1,0 +1,15 @@
+{
+  "name": "fraudradar",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "15.3.1",
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}
